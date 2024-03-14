@@ -1,0 +1,130 @@
+---
+title: 'Coursera Practical Machine Learning Course'
+subtitle: 'Prediction Assignment Writeup'
+author: "Felipe Ruiz Bruzzone"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# Background
+
+Using devices such as *Jawbone Up*, *Nike FuelBand*, and *Fitbit* it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the *quantified self movement* - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+In this project, we will  use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. Based on that bunch of information we are going to design a prediction model and use it to predict 20 different test cases. This assignment is made in order to fulfill the Coursera / John Hopkins *Practical Machine Learning* Course requisites. 
+
+More information about the dataset is available [here](http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har) (see the section on the *Weight Lifting Exercise Dataset*).
+
+- The training data for this project is available [here](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv). 
+- The test data is available [here](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv).
+
+# System and Data Preparation
+
+## System parameters
+Previous to data manipulation we set the session parameters, considering r code chunk configuration, the definition of a seed and library loading.
+```{r setup, message = FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+set.seed(1967) 
+library(caret)
+library(randomForest)
+```
+
+## Loading the data
+Using the following code we will download the necessary files to our local memory.
+```{r}
+trainUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+trainFile <- "pml-trainging.csv"
+testFile <- "pml-testing.csv"
+if (!file.exists(trainFile)){download.file(trainUrl, trainFile, method = "curl")}
+if (!file.exists(testFile)){download.file(testUrl, testFile, method = "curl")}
+training <- read.csv(trainFile)
+testing <- read.csv(testFile)
+dim(training)
+dim(testing)
+```
+
+## Data Partition
+In order to train a prediction model we are going to split our *training* data into a training set *df.train* and a testing set *df.test* using the standard 6:4 ratio. We will use the original *testing* data only to respond the *Course Project Prediction Quiz*. Following, the next code show the dimensions of both training and testing recently created datasets.
+```{r}
+inTrain <- createDataPartition(training$classe, p = .6, list = FALSE)
+df.train <- training[inTrain,]
+df.test <- training[-inTrain,]
+
+dim(df.train)
+dim(df.test)
+```
+## Data validation
+There are information that we do not need. We are going to remove the *NAs*, the Near Zero Variance(NZR) and ID variables.
+
+```{r}
+# remove columns that only contain NA's
+df.train <- df.train[, colSums(is.na(df.train)) == 0]
+df.test <- df.test[, colSums(is.na(df.test)) == 0]
+
+# remove the Near Zero Variance columns
+NZV <- nearZeroVar(df.train)
+df.train <- df.train[,-NZV]
+df.test <- df.test[,-NZV]
+
+# remove ID variables
+df.train <- df.train[,-(1:5)]
+df.test <- df.test[,-(1:5)]
+
+# check dimention
+dim(df.train)
+dim(df.test)
+```
+After data cleaning, we will have 54 variables for the analysis.
+
+# Model building
+In this section we will build a predictive model based on the random forest paradigm, as it is one of the best performing. Using all available variables we will train a model to predict the *classe* variable.
+
+## Building Random Forest Model
+With the next code chunk we will build a Random Forest model and perform a prediction.
+
+```{r, cache=TRUE}
+mod.rf <- train(classe ~., data = df.train, method = "rf",
+                trControl = trainControl("cv", number = 5))
+mod.rf$finalModel
+```
+
+## Prediction with Random Forest Model
+
+```{r}
+pred.rf <- predict(mod.rf, df.test)
+result.rf <- confusionMatrix(pred.rf, factor(df.test$classe))
+accu.rf <- result.rf$overall[1]
+oob.rf <- 1 - result.rf$overall[1]
+result.rf
+```
+The accuracy rate of the Random Forest Model is `r round(accu.rf, 3)`, and the out of sample error is `r round(oob.rf, 3)*100`%.
+
+# Responses to the *Course Project Prediction Quiz*.
+In this section we will use the model we have produced and tested to make predictions on the 20 data points from the original *testing* dataset.
+
+## Testing Data preparation
+Following the same logic used to prepare the *training dataset*, in the next code chunk we remove the *NAs*, the Near Zero Variance(NZR) and ID variables.
+
+```{r}
+# remove columns that only contain NA's
+df.testing <- testing[, colSums(is.na(testing)) == 0]
+
+# remove the Near Zero Variance columns
+NZV <- nearZeroVar(df.testing)
+df.testing <- df.testing[,-NZV]
+
+# remove ID variables
+df.testing <- df.testing[,-(1:5)]
+
+# check dimention
+dim(df.testing)
+```
+
+## Calculate predictions using *testing* dataset
+Finally, applying our already built model we use it to make predictions on the 20 data points from the original *testing* dataset.
+
+```{r}
+pred.quiz <- predict(mod.rf, df.testing)
+pred.quiz
+```
+
